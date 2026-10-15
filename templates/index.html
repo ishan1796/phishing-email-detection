@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="AI-powered phishing email detection system. Analyze email content in real-time and identify phishing attempts with high accuracy." />
+  <title>PhishGuard — AI Email Security Scanner</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ─────────────────────────────────────────
+       CSS RESET & TOKENS
+    ───────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0D0D1A;
+      --surface:   #13132B;
+      --card:      rgba(255,255,255,0.04);
+      --border:    rgba(255,255,255,0.08);
+      --primary:   #6C63FF;
+      --primary-g: linear-gradient(135deg, #6C63FF 0%, #A855F7 100%);
+      --danger:    #FF4C6A;
+      --danger-g:  linear-gradient(135deg, #FF4C6A 0%, #FF6B35 100%);
+      --success:   #22D3A5;
+      --success-g: linear-gradient(135deg, #22D3A5 0%, #4ADE80 100%);
+      --text:      #E2E8F0;
+      --muted:     #64748B;
+      --accent:    #43E8D8;
+      --glow-p:    rgba(108,99,255,0.35);
+      --glow-d:    rgba(255,76,106,0.35);
+      --glow-s:    rgba(34,211,165,0.35);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ─────────────────────────────────────────
+       ANIMATED BACKGROUND
+    ───────────────────────────────────────── */
+    .bg-orbs {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden;
+    }
+    .orb {
+      position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.18;
+      animation: float 12s ease-in-out infinite;
+    }
+    .orb-1 { width: 500px; height: 500px; background: var(--primary); top: -150px; left: -150px; animation-delay: 0s; }
+    .orb-2 { width: 400px; height: 400px; background: #A855F7; bottom: -100px; right: -100px; animation-delay: -4s; }
+    .orb-3 { width: 300px; height: 300px; background: var(--accent); top: 40%; left: 50%; animation-delay: -8s; }
+
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33%       { transform: translate(30px, -30px) scale(1.05); }
+      66%       { transform: translate(-20px, 20px) scale(0.97); }
+    }
+
+    /* ─────────────────────────────────────────
+       GRID OVERLAY
+    ───────────────────────────────────────── */
+    .grid-overlay {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(108,99,255,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(108,99,255,0.04) 1px, transparent 1px);
+      background-size: 60px 60px;
+    }
+
+    /* ─────────────────────────────────────────
+       LAYOUT
+    ───────────────────────────────────────── */
+    .wrapper {
+      position: relative; z-index: 1;
+      max-width: 900px; margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+
+    /* ─────────────────────────────────────────
+       HEADER
+    ───────────────────────────────────────── */
+    header {
+      text-align: center;
+      padding: 3rem 0 2rem;
+      animation: fadeDown 0.7s ease both;
+    }
+
+    .logo-badge {
+      display: inline-flex; align-items: center; gap: 0.6rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 50px;
+      padding: 0.45rem 1.2rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 1.4rem;
+      backdrop-filter: blur(12px);
+    }
+    .logo-badge .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--success);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.5; transform: scale(0.7); }
+    }
+
+    h1 {
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 800;
+      line-height: 1.1;
+      background: linear-gradient(135deg, #fff 30%, #A78BFA 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.8rem;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 1.05rem;
+      max-width: 520px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+
+    /* ─────────────────────────────────────────
+       STATS STRIP
+    ───────────────────────────────────────── */
+    .stats-strip {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin: 2rem 0;
+      animation: fadeUp 0.7s 0.2s ease both;
+    }
+
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.2rem;
+      text-align: center;
+      backdrop-filter: blur(12px);
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .stat-card:hover { transform: translateY(-3px); border-color: rgba(108,99,255,0.3); }
+
+    .stat-value {
+      font-size: 1.8rem;
+      font-weight: 800;
+      background: var(--primary-g);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .stat-label { font-size: 0.75rem; color: var(--muted); margin-top: 0.2rem; font-weight: 500; }
+
+    /* ─────────────────────────────────────────
+       SCANNER CARD
+    ───────────────────────────────────────── */
+    .scanner-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 2rem;
+      backdrop-filter: blur(16px);
+      animation: fadeUp 0.7s 0.3s ease both;
+      position: relative;
+      overflow: hidden;
+    }
+    .scanner-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: var(--primary-g);
+      border-radius: 24px 24px 0 0;
+    }
+
+    .card-header {
+      display: flex; align-items: center; gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+    .card-icon {
+      width: 42px; height: 42px; border-radius: 12px;
+      background: var(--primary-g);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.2rem;
+      box-shadow: 0 4px 16px var(--glow-p);
+    }
+    .card-title { font-size: 1.1rem; font-weight: 700; }
+    .card-subtitle { font-size: 0.82rem; color: var(--muted); }
+
+    /* Textarea */
+    .input-area {
+      position: relative; margin-bottom: 1.25rem;
+    }
+    .input-label {
+      display: block; font-size: 0.82rem; font-weight: 600;
+      color: var(--muted); margin-bottom: 0.5rem; letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    #emailInput {
+      width: 100%;
+      min-height: 180px;
+      background: rgba(0,0,0,0.3);
+      border: 1.5px solid var(--border);
+      border-radius: 14px;
+      padding: 1rem 1.1rem;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 0.95rem;
+      line-height: 1.7;
+      resize: vertical;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+    #emailInput::placeholder { color: #3D4A5C; }
+    #emailInput:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--glow-p);
+    }
+
+    .char-counter {
+      position: absolute; bottom: 10px; right: 14px;
+      font-size: 0.75rem; color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Quick examples */
+    .quick-examples {
+      display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.5rem;
+    }
+    .example-btn {
+      background: rgba(108,99,255,0.1);
+      border: 1px solid rgba(108,99,255,0.25);
+      border-radius: 8px;
+      padding: 0.35rem 0.75rem;
+      font-size: 0.78rem;
+      color: #A78BFA;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Inter', sans-serif;
+    }
+    .example-btn:hover {
+      background: rgba(108,99,255,0.2);
+      border-color: rgba(108,99,255,0.5);
+      transform: translateY(-1px);
+    }
+    .example-label {
+      font-size: 0.78rem; color: var(--muted); align-self: center; margin-right: 0.25rem;
+    }
+
+    /* Action buttons */
+    .actions {
+      display: flex; gap: 0.75rem; flex-wrap: wrap;
+    }
+    #scanBtn {
+      flex: 1;
+      padding: 0.9rem 1.5rem;
+      border: none; border-radius: 14px; cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      font-size: 1rem; font-weight: 700;
+      background: var(--primary-g);
+      color: white;
+      display: flex; align-items: center; justify-content: center; gap: 0.6rem;
+      box-shadow: 0 4px 20px var(--glow-p);
+      transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+      letter-spacing: 0.02em;
+    }
+    #scanBtn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px var(--glow-p);
+    }
+    #scanBtn:active:not(:disabled) { transform: translateY(0); }
+    #scanBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    #clearBtn {
+      padding: 0.9rem 1.2rem;
+      border: 1.5px solid var(--border);
+      border-radius: 14px; cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.9rem; font-weight: 600;
+      background: transparent; color: var(--muted);
+      transition: all 0.2s;
+    }
+    #clearBtn:hover { border-color: var(--primary); color: var(--text); }
+
+    /* ─────────────────────────────────────────
+       SPINNER
+    ───────────────────────────────────────── */
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2.5px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: none;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─────────────────────────────────────────
+       RESULT PANEL
+    ───────────────────────────────────────── */
+    #resultPanel {
+      margin-top: 1.5rem;
+      display: none;
+      animation: popIn 0.4s cubic-bezier(0.34,1.56,0.64,1) both;
+    }
+
+    @keyframes popIn {
+      0%   { opacity: 0; transform: scale(0.9) translateY(10px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .result-main {
+      border-radius: 18px;
+      padding: 1.75rem;
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .result-main.phishing {
+      background: linear-gradient(135deg, rgba(255,76,106,0.15) 0%, rgba(255,107,53,0.1) 100%);
+      border: 1.5px solid rgba(255,76,106,0.35);
+      box-shadow: 0 0 40px rgba(255,76,106,0.12);
+    }
+    .result-main.safe {
+      background: linear-gradient(135deg, rgba(34,211,165,0.15) 0%, rgba(74,222,128,0.1) 100%);
+      border: 1.5px solid rgba(34,211,165,0.35);
+      box-shadow: 0 0 40px rgba(34,211,165,0.12);
+    }
+
+    .result-icon-wrap {
+      width: 64px; height: 64px; border-radius: 18px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2rem;
+    }
+    .phishing .result-icon-wrap { background: linear-gradient(135deg, rgba(255,76,106,0.3), rgba(255,107,53,0.2)); }
+    .safe     .result-icon-wrap { background: linear-gradient(135deg, rgba(34,211,165,0.3), rgba(74,222,128,0.2)); }
+
+    .result-info { flex: 1; min-width: 0; }
+    .result-verdict {
+      font-size: 1.6rem; font-weight: 800; line-height: 1;
+      margin-bottom: 0.25rem;
+    }
+    .phishing .result-verdict { color: #FF6B8A; }
+    .safe     .result-verdict { color: #22D3A5; }
+
+    .result-sub { font-size: 0.88rem; color: var(--muted); }
+
+    .confidence-bar-wrap { margin-top: 0.8rem; }
+    .conf-row {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 0.3rem;
+    }
+    .conf-label { font-size: 0.78rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    .conf-pct   { font-size: 1rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+    .phishing .conf-pct { color: #FF6B8A; }
+    .safe     .conf-pct { color: #22D3A5; }
+
+    .conf-bar-track {
+      width: 100%; height: 6px; background: rgba(255,255,255,0.08);
+      border-radius: 999px; overflow: hidden;
+    }
+    .conf-bar-fill {
+      height: 100%; border-radius: 999px;
+      transition: width 0.8s cubic-bezier(0.34,1.2,0.64,1);
+      width: 0%;
+    }
+    .phishing .conf-bar-fill { background: var(--danger-g); }
+    .safe     .conf-bar-fill { background: var(--success-g); }
+
+    .model-tag {
+      position: absolute; top: 1rem; right: 1rem;
+      background: rgba(0,0,0,0.25);
+      border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.25rem 0.6rem;
+      font-size: 0.72rem; color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ─────────────────────────────────────────
+       FEATURE TABLE
+    ───────────────────────────────────────── */
+    .features-section {
+      margin-top: 1rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .features-header {
+      padding: 0.75rem 1rem;
+      font-size: 0.8rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.07em;
+      color: var(--muted);
+      background: rgba(255,255,255,0.02);
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .features-header:hover { background: rgba(255,255,255,0.04); }
+    .chevron { transition: transform 0.3s; font-size: 0.7rem; }
+    .chevron.open { transform: rotate(180deg); }
+
+    .features-body { display: none; }
+    .features-body.open { display: block; }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 0;
+    }
+    .feature-item {
+      padding: 0.65rem 1rem;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      border-right: 1px solid rgba(255,255,255,0.04);
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.82rem;
+    }
+    .feature-key { color: var(--muted); }
+    .feature-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem; font-weight: 600;
+    }
+    .feature-val.flag-true  { color: #FF6B8A; }
+    .feature-val.flag-false { color: var(--success); }
+    .feature-val.num        { color: #A78BFA; }
+
+    /* ─────────────────────────────────────────
+       HOW IT WORKS
+    ───────────────────────────────────────── */
+    .how-section {
+      margin-top: 2.5rem;
+      animation: fadeUp 0.7s 0.5s ease both;
+    }
+    .section-title {
+      font-size: 1rem; font-weight: 700; margin-bottom: 1.25rem;
+      color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 1rem;
+    }
+    .step-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.25rem;
+      transition: transform 0.2s, border-color 0.2s;
+      backdrop-filter: blur(8px);
+    }
+    .step-card:hover { transform: translateY(-3px); border-color: rgba(108,99,255,0.35); }
+    .step-num {
+      font-size: 0.72rem; font-weight: 700;
+      color: var(--primary); text-transform: uppercase;
+      letter-spacing: 0.1em; margin-bottom: 0.5rem;
+    }
+    .step-icon { font-size: 1.6rem; margin-bottom: 0.5rem; }
+    .step-name { font-size: 0.9rem; font-weight: 700; margin-bottom: 0.3rem; }
+    .step-desc { font-size: 0.78rem; color: var(--muted); line-height: 1.5; }
+
+    /* ─────────────────────────────────────────
+       FOOTER
+    ───────────────────────────────────────── */
+    footer {
+      text-align: center;
+      margin-top: 3rem;
+      padding-top: 2rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.8rem;
+      animation: fadeUp 0.7s 0.6s ease both;
+    }
+
+    /* ─────────────────────────────────────────
+       ERROR TOAST
+    ───────────────────────────────────────── */
+    .toast {
+      position: fixed; bottom: 2rem; right: 2rem;
+      background: #1E1E3A;
+      border: 1px solid #FF4C6A55;
+      border-radius: 12px;
+      padding: 0.85rem 1.2rem;
+      display: flex; align-items: center; gap: 0.6rem;
+      font-size: 0.88rem;
+      max-width: 360px;
+      z-index: 1000;
+      transform: translateY(120%);
+      transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .toast.show { transform: translateY(0); }
+    .toast-icon { font-size: 1.1rem; }
+    .toast-text { color: #FF8FAB; }
+
+    /* ─────────────────────────────────────────
+       ANIMATIONS
+    ───────────────────────────────────────── */
+    @keyframes fadeDown {
+      from { opacity: 0; transform: translateY(-20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ─────────────────────────────────────────
+       RESPONSIVE
+    ───────────────────────────────────────── */
+    @media (max-width: 600px) {
+      .stats-strip { grid-template-columns: 1fr; }
+      .steps-grid  { grid-template-columns: 1fr 1fr; }
+      .result-main { flex-direction: column; text-align: center; }
+      .model-tag   { position: static; margin-top: 0.75rem; align-self: flex-start; }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Background effects -->
+  <div class="bg-orbs">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+  <div class="grid-overlay"></div>
+
+  <div class="wrapper">
+
+    <!-- HEADER -->
+    <header>
+      <div class="logo-badge">
+        <span class="dot"></span>
+        AI-Powered Security
+      </div>
+      <h1>PhishGuard</h1>
+      <p class="subtitle">
+        Real-time phishing email detection powered by machine learning.
+        Paste any email and get an instant security verdict.
+      </p>
+    </header>
+
+    <!-- STATS STRIP -->
+    <div class="stats-strip" id="statsStrip">
+      <div class="stat-card">
+        <div class="stat-value">95%+</div>
+        <div class="stat-label">Detection Accuracy</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">4</div>
+        <div class="stat-label">ML Models Trained</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">11+</div>
+        <div class="stat-label">Feature Dimensions</div>
+      </div>
+    </div>
+
+    <!-- SCANNER CARD -->
+    <div class="scanner-card">
+      <div class="card-header">
+        <div class="card-icon">🛡️</div>
+        <div>
+          <div class="card-title">Email Scanner</div>
+          <div class="card-subtitle">Paste your email content below to analyze it</div>
+        </div>
+      </div>
+
+      <!-- Quick examples -->
+      <div class="quick-examples">
+        <span class="example-label">Try:</span>
+        <button class="example-btn" id="exPhishing" onclick="loadExample('phishing')">🚨 Phishing Example</button>
+        <button class="example-btn" id="exSafe"     onclick="loadExample('safe')">✅ Safe Example</button>
+      </div>
+
+      <!-- Input area -->
+      <div class="input-area">
+        <label class="input-label" for="emailInput">Email Content</label>
+        <textarea
+          id="emailInput"
+          placeholder="Paste email text here...&#10;&#10;Example: 'Your account has been suspended. Click here to verify immediately...'"
+          aria-label="Email text to analyze"
+        ></textarea>
+        <span class="char-counter" id="charCounter">0 chars</span>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="actions">
+        <button id="scanBtn" onclick="scanEmail()">
+          <span class="spinner" id="spinner"></span>
+          <span id="scanBtnText">🔍 Scan Email</span>
+        </button>
+        <button id="clearBtn" onclick="clearAll()">✕ Clear</button>
+      </div>
+
+      <!-- Result Panel -->
+      <div id="resultPanel">
+        <div class="result-main" id="resultMain">
+          <div class="result-icon-wrap" id="resultIcon"></div>
+          <div class="result-info">
+            <div class="result-verdict" id="resultVerdict"></div>
+            <div class="result-sub" id="resultSub"></div>
+            <div class="confidence-bar-wrap">
+              <div class="conf-row">
+                <span class="conf-label">Confidence</span>
+                <span class="conf-pct" id="confPct"></span>
+              </div>
+              <div class="conf-bar-track">
+                <div class="conf-bar-fill" id="confBarFill"></div>
+              </div>
+            </div>
+          </div>
+          <div class="model-tag" id="modelTag"></div>
+        </div>
+
+        <!-- Feature breakdown -->
+        <div class="features-section">
+          <div class="features-header" id="featuresToggle" onclick="toggleFeatures()">
+            <span>📊 Feature Analysis</span>
+            <span class="chevron" id="chevron">▼</span>
+          </div>
+          <div class="features-body" id="featuresBody">
+            <div class="feature-grid" id="featureGrid"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HOW IT WORKS -->
+    <div class="how-section">
+      <div class="section-title">How it works</div>
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-num">Step 1</div>
+          <div class="step-icon">🧹</div>
+          <div class="step-name">Text Cleaning</div>
+          <div class="step-desc">Tokenization, stopword removal & lemmatization.</div>
+        </div>
+        <div class="step-card">
+          <div class="step-num">Step 2</div>
+          <div class="step-icon">🔗</div>
+          <div class="step-name">URL Analysis</div>
+          <div class="step-desc">Detect IPs, shorteners, and suspicious domains.</div>
+        </div>
+        <div class="step-card">
+          <div class="step-num">Step 3</div>
+          <div class="step-icon">📐</div>
+          <div class="step-name">TF-IDF Vectors</div>
+          <div class="step-desc">Convert text to 5,000-dimensional term-frequency vectors.</div>
+        </div>
+        <div class="step-card">
+          <div class="step-num">Step 4</div>
+          <div class="step-icon">🤖</div>
+          <div class="step-name">ML Prediction</div>
+          <div class="step-desc">Best model from RF, SVM, LR & Naive Bayes ensemble.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <footer>
+      <p>🛡️ <strong>PhishGuard</strong> — Phishing Email Detection System &nbsp;|&nbsp; Built with Python &amp; Scikit-learn</p>
+    </footer>
+
+  </div>
+
+  <!-- Error Toast -->
+  <div class="toast" id="toast">
+    <span class="toast-icon">⚠️</span>
+    <span class="toast-text" id="toastText"></span>
+  </div>
+
+  <!-- ─────────────────────────────────────────
+       JAVASCRIPT
+  ───────────────────────────────────────── -->
+  <script>
+    // ── Example emails ──────────────────────────
+    const EXAMPLES = {
+      phishing: `Your bank account has been suspended due to suspicious activity. Click here immediately to verify: http://192.168.1.45/login?token=abc123xyz. Failure to act within 24 hours will result in permanent account closure. URGENT! Your password must be updated immediately to restore access. Winner! You have won $50,000. Login at http://bit.ly/xK3mP to claim your prize now!`,
+      safe: `Hi Sarah, just a friendly reminder about our team meeting tomorrow at 10 AM. Please review the attached agenda and come prepared with your project updates. Let me know if you have any questions. Looking forward to seeing everyone! Best regards, the team.`,
+    };
+
+    // ── Character counter ────────────────────────
+    const emailInput = document.getElementById('emailInput');
+    const charCounter = document.getElementById('charCounter');
+    emailInput.addEventListener('input', () => {
+      charCounter.textContent = `${emailInput.value.length} chars`;
+    });
+
+    // ── Load example ─────────────────────────────
+    function loadExample(type) {
+      emailInput.value = EXAMPLES[type];
+      charCounter.textContent = `${emailInput.value.length} chars`;
+      emailInput.focus();
+    }
+
+    // ── Scan email ───────────────────────────────
+    async function scanEmail() {
+      const text = emailInput.value.trim();
+      if (!text) { showToast('Please paste some email text first.'); return; }
+      if (text.length < 10) { showToast('Email text is too short to analyze.'); return; }
+
+      setLoading(true);
+      hideResult();
+
+      try {
+        const res = await fetch('/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email_text: text }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || data.error) {
+          showToast(data.error || 'Something went wrong. Make sure the model is trained.');
+          return;
+        }
+
+        showResult(data);
+      } catch (err) {
+        showToast('Cannot connect to server. Is the Flask app running?');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    // ── Show result ──────────────────────────────
+    function showResult(data) {
+      const isPhishing = data.prediction === 1;
+      const panel   = document.getElementById('resultPanel');
+      const main    = document.getElementById('resultMain');
+      const icon    = document.getElementById('resultIcon');
+      const verdict = document.getElementById('resultVerdict');
+      const sub     = document.getElementById('resultSub');
+      const confPct = document.getElementById('confPct');
+      const fill    = document.getElementById('confBarFill');
+      const tag     = document.getElementById('modelTag');
+
+      // Set classes
+      main.className = `result-main ${isPhishing ? 'phishing' : 'safe'}`;
+      icon.textContent = isPhishing ? '🚨' : '✅';
+      verdict.textContent = data.label;
+      sub.textContent = isPhishing
+        ? 'This email contains multiple phishing indicators. Do not click any links.'
+        : 'This email appears to be legitimate. No major threats detected.';
+
+      confPct.textContent = data.confidence_pct;
+      tag.textContent = `⚡ ${data.model_used}`;
+
+      // Animate confidence bar
+      fill.style.width = '0%';
+      panel.style.display = 'block';
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          fill.style.width = `${(data.confidence * 100).toFixed(1)}%`;
+        });
+      });
+
+      // Render features
+      renderFeatures(data.features);
+
+      // Scroll to result
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // ── Render features ──────────────────────────
+    function renderFeatures(features) {
+      const grid = document.getElementById('featureGrid');
+      grid.innerHTML = '';
+      for (const [key, val] of Object.entries(features)) {
+        const item = document.createElement('div');
+        item.className = 'feature-item';
+
+        let valClass = 'num';
+        let display = String(val);
+
+        if (typeof val === 'boolean') {
+          valClass = val ? 'flag-true' : 'flag-false';
+          display = val ? 'Yes ⚠' : 'No ✓';
+        } else if (typeof val === 'number') {
+          valClass = val > 0 ? 'flag-true' : 'num';
+        }
+
+        item.innerHTML = `
+          <span class="feature-key">${key}</span>
+          <span class="feature-val ${valClass}">${display}</span>
+        `;
+        grid.appendChild(item);
+      }
+    }
+
+    // ── Toggle features ──────────────────────────
+    function toggleFeatures() {
+      const body    = document.getElementById('featuresBody');
+      const chevron = document.getElementById('chevron');
+      body.classList.toggle('open');
+      chevron.classList.toggle('open');
+    }
+
+    // ── Utilities ────────────────────────────────
+    function hideResult() {
+      document.getElementById('resultPanel').style.display = 'none';
+    }
+
+    function clearAll() {
+      emailInput.value = '';
+      charCounter.textContent = '0 chars';
+      hideResult();
+      emailInput.focus();
+    }
+
+    function setLoading(loading) {
+      const btn     = document.getElementById('scanBtn');
+      const spinner = document.getElementById('spinner');
+      const text    = document.getElementById('scanBtnText');
+      btn.disabled       = loading;
+      spinner.style.display = loading ? 'block' : 'none';
+      text.textContent   = loading ? 'Analyzing...' : '🔍 Scan Email';
+    }
+
+    let toastTimer = null;
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastText').textContent = message;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 4000);
+    }
+
+    // ── Enter key shortcut ───────────────────────
+    emailInput.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key === 'Enter') scanEmail();
+    });
+  </script>
+</body>
+</html>
